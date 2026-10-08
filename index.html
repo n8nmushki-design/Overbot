@@ -1,0 +1,528 @@
+i<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Deriv Over/Under Bot</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #22c55e;
+    --danger: #ef4444;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 12px;
+    line-height: 1.4;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card);
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+  .header h1 { font-size: 1.1rem; font-weight: 600; }
+  .badge {
+    font-size: 0.75rem;
+    background: #0ea5e9;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .status {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+  .status.connecting { background: #f59e0b; color: #000; }
+  .status.connected  { background: var(--accent); color: #000; }
+  .status.error      { background: var(--danger); color: white; }
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card h2 {
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  input, select {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #0f172a;
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  .btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn:active { opacity: 0.85; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-danger  { background: var(--danger); color: white; }
+  .btn-secondary { background: #334155; color: white; }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .tick-display {
+    text-align: center;
+    padding: 20px 10px;
+  }
+  .tick-price {
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: -1px;
+  }
+  .last-digit {
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin: 8px 0;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    text-align: center;
+  }
+  .stat-box {
+    background: #0f172a;
+    padding: 10px 6px;
+    border-radius: 8px;
+  }
+  .stat-box .value { font-size: 1.2rem; font-weight: 700; }
+  .stat-box .label { font-size: 0.7rem; color: var(--muted); }
+  .log {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 10px;
+    height: 180px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+  .log .info  { color: #38bdf8; }
+  .log .ok    { color: var(--accent); }
+  .log .err   { color: var(--danger); }
+  .log .warn  { color: #f59e0b; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>Deriv Over/Under Bot</h1>
+    <span class="badge" id="appIdBadge">App ID: 34CtuujwUQPcjQL4fFDBO</span>
+  </div>
+  <div id="connStatus" class="status connecting">Disconnected</div>
+</div>
+
+<!-- AUTH -->
+<div class="card" id="authCard">
+  <h2>API Authentication</h2>
+  
+  <label>Personal Access Token (PAT)</label>
+  <input type="password" id="tokenInput" placeholder="Paste your NEW Deriv API token here" autocomplete="off">
+  
+  <label>App ID</label>
+  <input type="text" id="appIdInput" value="34CtuujwUQPcjQL4fFDBO">
+  
+  <p style="font-size:0.75rem; color:var(--muted); margin-bottom:12px;">
+    Your App ID is pre-filled. If connection fails it will automatically try the public ID 1089.
+  </p>
+  
+  <button class="btn btn-primary" id="connectBtn" onclick="connect()">Connect</button>
+</div>
+
+<!-- MAIN CONTROLS -->
+<div id="mainSection" class="hidden">
+  <div class="card">
+    <div class="tick-display">
+      <div style="font-size:0.85rem;color:var(--muted)" id="symbolLabel">R_100</div>
+      <div class="tick-price" id="tickPrice">—</div>
+      <div class="last-digit" id="lastDigit">—</div>
+      <div style="font-size:0.8rem;color:var(--muted)">Last Digit</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Trade Settings</h2>
+    <div class="row">
+      <div>
+        <label>Symbol</label>
+        <select id="symbol">
+          <option value="R_10">Volatility 10</option>
+          <option value="R_25">Volatility 25</option>
+          <option value="R_50">Volatility 50</option>
+          <option value="R_75">Volatility 75</option>
+          <option value="R_100" selected>Volatility 100</option>
+          <option value="1HZ10V">1s Volatility 10</option>
+          <option value="1HZ25V">1s Volatility 25</option>
+          <option value="1HZ50V">1s Volatility 50</option>
+          <option value="1HZ75V">1s Volatility 75</option>
+          <option value="1HZ100V">1s Volatility 100</option>
+        </select>
+      </div>
+      <div>
+        <label>Duration (ticks)</label>
+        <select id="duration">
+          <option value="1">1 tick</option>
+          <option value="2">2 ticks</option>
+          <option value="3" selected>3 ticks</option>
+          <option value="4">4 ticks</option>
+          <option value="5">5 ticks</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Stake</label>
+        <input type="number" id="stake" value="1" min="0.35" step="0.01">
+      </div>
+      <div>
+        <label>Barrier (0-9)</label>
+        <select id="barrier">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4" selected>4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:12px">
+      <button class="btn btn-primary" onclick="manualTrade('DIGITOVER')">OVER</button>
+      <button class="btn btn-danger"  onclick="manualTrade('DIGITUNDER')">UNDER</button>
+    </div>
+
+    <button class="btn btn-secondary" id="autoBtn" onclick="toggleAuto()">Start Auto (Random)</button>
+  </div>
+
+  <div class="card">
+    <h2>Session Stats</h2>
+    <div class="stats">
+      <div class="stat-box">
+        <div class="value" id="balance">—</div>
+        <div class="label">Balance</div>
+      </div>
+      <div class="stat-box">
+        <div class="value" id="profit">0.00</div>
+        <div class="label">Profit</div>
+      </div>
+      <div class="stat-box">
+        <div class="value" id="winrate">0%</div>
+        <div class="label">Win Rate</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LOG -->
+<div class="card">
+  <h2>Connection Log</h2>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const MY_APP_ID = "34CtuujwUQPcjQL4fFDBO";
+const FALLBACK_APP_ID = "1089";
+
+let ws = null;
+let authorized = false;
+let balance = 0;
+let currency = "USD";
+let currentSymbol = "R_100";
+let lastDigit = null;
+let autoRunning = false;
+let autoInterval = null;
+let wins = 0, losses = 0, totalProfit = 0;
+let reqId = 1;
+let triedFallback = false;
+let currentAppId = MY_APP_ID;
+
+function log(msg, type = "info") {
+  const el = document.getElementById("log");
+  const time = new Date().toLocaleTimeString();
+  el.innerHTML += `<div class="\( {type}">[ \){time}] ${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(text, cls) {
+  const el = document.getElementById("connStatus");
+  el.textContent = text;
+  el.className = "status " + cls;
+}
+
+function connect() {
+  const token = document.getElementById("tokenInput").value.trim();
+  let appId = document.getElementById("appIdInput").value.trim() || MY_APP_ID;
+
+  if (!token) {
+    alert("Please enter your Personal Access Token");
+    return;
+  }
+
+  // Reset fallback flag when user clicks Connect manually
+  triedFallback = false;
+  currentAppId = appId;
+
+  startConnection(token, appId);
+}
+
+function startConnection(token, appId) {
+  document.getElementById("appIdBadge").textContent = "App ID: " + appId;
+  document.getElementById("connectBtn").disabled = true;
+  document.getElementById("connectBtn").textContent = "Connecting…";
+
+  if (ws) {
+    try { ws.close(); } catch(e) {}
+  }
+
+  const url = `wss://ws.derivws.com/websockets/v3?app_id=${appId}`;
+  log(`Connecting to ${url}`, "info");
+  setStatus("Connecting…", "connecting");
+
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    log("WebSocket opened – authorizing…", "ok");
+    setStatus("Authorizing…", "connecting");
+    send({ authorize: token });
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    handleMessage(data, token);
+  };
+
+  ws.onerror = () => {
+    log("Socket error", "err");
+  };
+
+  ws.onclose = (ev) => {
+    log(`Connection closed (Code ${ev.code})`, "err");
+
+    // Automatic fallback to 1089 if first attempt failed
+    if (!authorized && !triedFallback && currentAppId !== FALLBACK_APP_ID) {
+      triedFallback = true;
+      log("Trying fallback App ID 1089…", "warn");
+      setTimeout(() => {
+        currentAppId = FALLBACK_APP_ID;
+        document.getElementById("appIdInput").value = FALLBACK_APP_ID;
+        startConnection(token, FALLBACK_APP_ID);
+      }, 1200);
+      return;
+    }
+
+    setStatus("Disconnected", "error");
+    authorized = false;
+    document.getElementById("connectBtn").disabled = false;
+    document.getElementById("connectBtn").textContent = "Connect";
+    document.getElementById("mainSection").classList.add("hidden");
+    document.getElementById("authCard").classList.remove("hidden");
+    stopAuto();
+  };
+}
+
+function send(obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  obj.req_id = reqId++;
+  ws.send(JSON.stringify(obj));
+}
+
+function handleMessage(data, token) {
+  if (data.error) {
+    log(`Error: \( {data.error.message} ( \){data.error.code})`, "err");
+
+    // If authorize fails with the custom App ID → try fallback
+    if (!authorized && !triedFallback && currentAppId !== FALLBACK_APP_ID) {
+      triedFallback = true;
+      log("Authorize failed. Switching to App ID 1089…", "warn");
+      setTimeout(() => {
+        currentAppId = FALLBACK_APP_ID;
+        document.getElementById("appIdInput").value = FALLBACK_APP_ID;
+        startConnection(token, FALLBACK_APP_ID);
+      }, 1000);
+    }
+    return;
+  }
+
+  switch (data.msg_type) {
+    case "authorize":
+      authorized = true;
+      balance = data.authorize.balance;
+      currency = data.authorize.currency;
+      log(`Authorized as ${data.authorize.loginid} | Balance: ${balance} ${currency}`, "ok");
+      setStatus("Connected", "connected");
+      document.getElementById("authCard").classList.add("hidden");
+      document.getElementById("mainSection").classList.remove("hidden");
+      document.getElementById("balance").textContent = balance.toFixed(2);
+      document.getElementById("connectBtn").disabled = false;
+      document.getElementById("connectBtn").textContent = "Connect";
+
+      // Keep-alive every 25 seconds
+      setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          send({ ping: 1 });
+        }
+      }, 25000);
+
+      // Subscribe balance
+      send({ balance: 1, subscribe: 1 });
+      // Start ticks
+      changeSymbol();
+      break;
+
+    case "balance":
+      balance = data.balance.balance;
+      document.getElementById("balance").textContent = balance.toFixed(2);
+      break;
+
+    case "tick":
+      const quote = data.tick.quote;
+      const digit = Math.floor(quote * 10) % 10;
+      lastDigit = digit;
+      document.getElementById("tickPrice").textContent = quote;
+      document.getElementById("lastDigit").textContent = digit;
+      document.getElementById("symbolLabel").textContent = data.tick.symbol;
+      break;
+
+    case "proposal":
+      if (data.proposal && data.proposal.id) {
+        send({
+          buy: data.proposal.id,
+          price: parseFloat(document.getElementById("stake").value)
+        });
+      }
+      break;
+
+    case "buy":
+      log(`Bought contract ${data.buy.contract_id} | Stake: ${data.buy.buy_price}`, "ok");
+      send({
+        proposal_open_contract: 1,
+        contract_id: data.buy.contract_id,
+        subscribe: 1
+      });
+      break;
+
+    case "proposal_open_contract":
+      if (data.proposal_open_contract.is_sold) {
+        const profit = data.proposal_open_contract.profit;
+        totalProfit += profit;
+        if (profit >= 0) wins++; else losses++;
+        updateStats();
+        log(`Contract closed | Profit: ${profit.toFixed(2)} ${currency}`, profit >= 0 ? "ok" : "err");
+      }
+      break;
+  }
+}
+
+function changeSymbol() {
+  currentSymbol = document.getElementById("symbol").value;
+  send({ ticks: currentSymbol, subscribe: 1 });
+  log(`Subscribed to ticks: ${currentSymbol}`, "info");
+}
+
+document.getElementById("symbol").addEventListener("change", changeSymbol);
+
+function manualTrade(contractType) {
+  if (!authorized) return;
+  const stake = parseFloat(document.getElementById("stake").value);
+  const duration = parseInt(document.getElementById("duration").value);
+  const barrier = document.getElementById("barrier").value;
+
+  log(`Requesting ${contractType} | Barrier ${barrier} | Stake ${stake}`, "info");
+
+  send({
+    proposal: 1,
+    amount: stake,
+    basis: "stake",
+    contract_type: contractType,
+    currency: currency,
+    duration: duration,
+    duration_unit: "t",
+    symbol: currentSymbol,
+    barrier: barrier
+  });
+}
+
+function toggleAuto() {
+  if (autoRunning) {
+    stopAuto();
+  } else {
+    autoRunning = true;
+    document.getElementById("autoBtn").textContent = "Stop Auto";
+    document.getElementById("autoBtn").classList.remove("btn-secondary");
+    document.getElementById("autoBtn").classList.add("btn-danger");
+    log("Auto trading started (random OVER/UNDER every 8s)", "warn");
+    autoInterval = setInterval(() => {
+      if (!authorized) return;
+      const type = Math.random() > 0.5 ? "DIGITOVER" : "DIGITUNDER";
+      manualTrade(type);
+    }, 8000);
+  }
+}
+
+function stopAuto() {
+  autoRunning = false;
+  clearInterval(autoInterval);
+  const btn = document.getElementById("autoBtn");
+  if (btn) {
+    btn.textContent = "Start Auto (Random)";
+    btn.classList.remove("btn-danger");
+    btn.classList.add("btn-secondary");
+  }
+}
+
+function updateStats() {
+  document.getElementById("profit").textContent = totalProfit.toFixed(2);
+  const total = wins + losses;
+  document.getElementById("winrate").textContent = total ? Math.round((wins / total) * 100) + "%" : "0%";
+}
+</script>
+</body>
+                 </html>
